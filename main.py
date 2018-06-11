@@ -1,62 +1,54 @@
+import icalendar
+from icalendar import Calendar, Event
 from bs4 import BeautifulSoup
-import requests
-import re
+import lxml
+import wget
+import os
 
-page = requests.get("https://events.downtownbentonville.org/")
-page.status_code
-soup = BeautifulSoup(page.content, 'html.parser')
-#print(soup.prettify())
+# Delete .ics file if it already exists to prevent copies (export(1), export(2), etc.)
+if os.path.isfile("./export.ics"):
+  os.remove("./export.ics")
 
-# Open text file for raw data output
-output = open('bentonvilleEvents.txt', 'w')
+# Download .ics file from website
+# DTSpringdale: https://downtownspringdale.org/?post_type=tribe_events&ical=1
+url = 'https://events.downtownbentonville.org/export?format=ics'  
+wget.download(url, './export.ics')  
+
+output = open('events.txt', 'w')
 # Write table headers to top of output file to be used when importing data
-output.write("Title| Time| Venue\n")
+output.write("Title; Cost; Venue; Description\n")
 
-# Find number of instances of times on list
-numTimes = len(soup.find_all(class_="timely-title-text"))
+# Check event cost for numbers
+def num_there(s):
+    return any(i.isdigit() for i in s)
 
-for y in range(numTimes-2):
-  print(y+1)
-  #Get title, time, venue, and category of event y
-  title = soup.find_all(class_="timely-title-text")[y].get_text()
-  time = soup.find_all(class_="timely-start-time")[y].get_text()
-  venue = soup.find_all(class_="timely-venue")[y].get_text()
-  # remove tabs, new lines, and a dash from time
-  time = time.replace('\t', '')
-  time = time.replace('\n', '')
-  time = time.replace('-', '')
-  venue = venue.replace('\t', '')
-  venue = venue.replace('\n', '')
-  venue = venue.replace('-', '')  
-  # Print event info with new line to separate them
-  # Don't need this, but nice to see when developing
-  print(title.strip())
-  print(time.strip())
-  print(venue.strip())
-  print("\n")
-  # Output to text file using .encode('utf-8') because otherwise ascii error will occur
-  output.write(title.encode('utf-8') + "| ")
-  output.write(time.encode('utf-8') + "| ")
-  output.write(venue.encode('utf-8') + "\n")
+g = open('export.ics','rb')
+gcal = Calendar.from_ical(g.read())
+for component in gcal.walk():
+  if component.name == "VEVENT":
+      summary = component.get('summary')
+      output.write(summary.encode("utf-8") + "; ")
+      # Only show event cost if contains number (aka exists)
+      if num_there(str(component.get('x-cost'))) == True:
+        output.write(component.get('x-cost'))
+      else:
+        output.write("na")
+      output.write("; ")
+      output.write(str(component.get('location')))
+      # Only show event description if it exists
+      ''' if str(component.get('description').encode("utf-8")) != "":
+      description = component.get('description')
+      soup = BeautifulSoup(description, 'lxml') '''
+      ''' for a in soup.find_all('p'):
+          desc = a.string
+          output.write(desc.encode("utf-8"))
+        else:
+          output.write("na")
+        output.write("; ") '''
+      # show contact information if isn't empty and isn't the default spam email
+      if component.get('contact') != "MAILTO:noreply@facebookmail.com" and component.get('contact') != "":
+        contact = component.get('contact')
+        output.write("Contact: " + contact.encode("utf-8"))
+      output.write("; \n")
+g.close()
 
-
-
-#For testing on first event in calendar
-''' x=28
-title = soup.find_all(class_="timely-title-text")[x].get_text()
-time = soup.find_all(class_="timely-start-time")[x].get_text()
-time = time.replace('\t', '')
-time = time.replace('\n', '')
-time = time.replace('-', '')
-venue = soup.find_all(class_="timely-venue")[x].get_text()
-print(title.strip())
-print(time.strip())
-print(venue.strip())
-print("\n") '''
-
-''' # find number of days
-numChildren = len(soup.find_all('h2'))
-print numChildren '''
-
-# Close the output file
-output.close()
